@@ -1,10 +1,12 @@
 import torch
+import argparse
 import numpy as np
 import torch.optim as optim
 import torchvision.transforms as transforms
 
 from torch import nn
 from torchvision import datasets
+from tqdm.notebook import tqdm
 from torch.utils.data.sampler import SubsetRandomSampler
 from network import Net
 
@@ -34,6 +36,8 @@ def load_data(batch_size):
 
     # convert data to a normalized torch.FloatTensor
     transform = transforms.Compose([
+        transforms.RandomRotation(10),
+        transforms.RandomHorizontalFlip(),
         transforms.ToTensor(),
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5))
         ])
@@ -75,34 +79,38 @@ def define_model():
     print("Defining the Network Architecture...\n")
     # create a complete CNN
     model = Net()
-    print(model)
 
     # move tensors to GPU if CUDA is available
     if train_on_gpu:
         model.cuda()
     return model
 
-def loss_and_optim(model):
+def loss_and_optim(model, lr, opt):
 
     # Specify Loss Functiona and Optimizer
     print("Defining the loss function and optimizer...\n")
 
     # specify loss function (categorical cross-entropy)
     criterion = nn.CrossEntropyLoss()
-
     # specify optimizer
-    optimizer = optim.SGD(model.parameters(), lr=0.01)
+    if opt == 'Adam':
+        optimizer = optim.Adam(model.parameters(), lr=lr)
+    optimizer = optim.SGD(model.parameters(), lr=lr)
 
     return criterion, optimizer
 
 def train(n_epochs, model, train_loader, valid_loader, criterion, optimizer):
     # Train the Network
-    print(f"Training the Network with {n_epochs} epochs...\n")
+    # print(f"Training the Network with {n_epochs} epochs...\n")
 
     # number of epochs to train the model
     n_epochs = n_epochs
 
     valid_loss_min = np.Inf # track change in validation loss
+
+    # For early stopping
+    epochs_to_stop = 5
+    epochs_no_change = 0
 
     for epoch in range(1, n_epochs+1):
 
@@ -161,6 +169,18 @@ def train(n_epochs, model, train_loader, valid_loader, criterion, optimizer):
             valid_loss))
             torch.save(model.state_dict(), 'model_cifar.pt')
             valid_loss_min = valid_loss
+            epochs_no_change = 0
+        else:
+            epochs_no_change += 1
+
+        if epochs_no_change == epochs_to_stop:
+            print("Early stopping...")
+            break
+
+    model.load_state_dict(torch.load('model_cifar.pt'))
+
+    return model
+
 
 def test(batch_size, model, test_loader, classes, criterion, optimizer):
 
@@ -212,14 +232,59 @@ def test(batch_size, model, test_loader, classes, criterion, optimizer):
         100. * np.sum(class_correct) / np.sum(class_total),
         np.sum(class_correct), np.sum(class_total)))
 
+    return (100. * np.sum(class_correct) / np.sum(class_total))
+
 def start():
+    # Command line arguments
+    ap = argparse.ArgumentParser()
+    ap.add_argument('-t', '--tune', type=bool, default=False, help="pass -t True for hyperparameter tuning")
+    args = vars(ap.parse_args())
+
     batch_size=20
-    train_load, valid_load, test_load, classes = load_data(batch_size)
-    model = define_model()
-    cr, op = loss_and_optim(model)
     n_epochs = 1
-    train(n_epochs, model, train_load, valid_load, cr, op)
-    test(batch_size, model, test_load, classes, cr, op)
+    # loads data and returns train, valid and test data
+    train_load, valid_load, test_load, classes = load_data(batch_size)
+    if not args['tune']:
+        learning_rate = 0.01
+        optimizer = 'SGD'
+
+        model = define_model()
+        cr, op = loss_and_optim(model, learning_rate, optimizer)
+
+        print("Training the network without hyperparameter tuning")
+    
+        train(n_epochs, model, train_load, valid_load, cr, op)
+        accuracy = test(batch_size, model, test_load, classes, cr, op)
+        with open('accuracy.txt', 'w') as f:
+            f.write(str(accuracy))
+    else:
+        learning_rates = [0.01, 0.001]
+        optimizers = ['Adam', 'SGD']
+        acc = []
+        max_acc = 0
+        best_lr = 0
+        best_opt = ''
+
+        for learning_rate in learning_rates:
+            for optimizer in optimizers:
+                print("\n ** Training with {} optimizer and {} learning rate **\n".format(optimizer, learning_rate))
+                model = define_model()
+                cr, op = loss_and_optim(model, learning_rate, optimizer)
+                model = train(n_epochs, model, train_load, valid_load, cr, op)
+                accuracy = test(batch_size, model, test_load, classes, cr, op)
+                if accuracy > max_acc:
+                    max_acc = accuracy
+                    best_opt = optimizer
+                    best_lr = learning_rate
+
+                    # Save the best performing model
+                    torch.save(model.state_dict(), 'model_cifar.pt')
+                    print("Saving best model...")
+        print("\nBest Learning Rate : {}\nBest Optimizer : {}\n Best Accuracy: {}".format(best_lr, best_opt,
+                                                                                       str(max_acc)))
+
+        with open('accuracy.txt', 'w') as f:
+            f.write(str(max_acc))
 
 # Start the training process
 start()
