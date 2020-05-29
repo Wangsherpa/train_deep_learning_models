@@ -9,6 +9,7 @@ from torchvision import datasets
 from tqdm.notebook import tqdm
 from torch.utils.data.sampler import SubsetRandomSampler
 from network import Net
+from send_mail import SendMail
 
 
 def check_gpu():
@@ -280,8 +281,12 @@ def start():
                     # Save the best performing model
                     torch.save(model.state_dict(), 'model_cifar.pt')
                     print("Saving best model...")
-        print("\nBest Learning Rate : {}\nBest Optimizer : {}\n Best Accuracy: {}".format(best_lr, best_opt,
+        print("\nBest Learning Rate : {}\nBest Optimizer : {}\nBest Accuracy: {}".format(best_lr, best_opt,
                                                                                        str(max_acc)))
+        # Send email user about the model performance and best hyperparameter so far
+        print("Sending email to the user...")
+        s = SendMail(str(max_acc) + '%', best_lr, best_opt)
+        s.send_mail()
 
         with open('accuracy.txt', 'w') as f:
             f.write(str(max_acc))
