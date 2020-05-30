@@ -246,8 +246,8 @@ def start():
     # loads data and returns train, valid and test data
     train_load, valid_load, test_load, classes = load_data(batch_size)
     if not args['tune']:
-        learning_rate = 0.01
-        optimizer = 'SGD'
+        learning_rate = 0.001
+        optimizer = 'Adam'
 
         model = define_model()
         cr, op = loss_and_optim(model, learning_rate, optimizer)
@@ -260,7 +260,7 @@ def start():
         with open('accuracy.txt', 'w') as f:
             f.write(str(accuracy))
     else:
-	n_epochs = 2
+        n_epochs = 2
         learning_rates = [0.01, 0.001]
         optimizers = ['Adam', 'SGD']
         acc = []
