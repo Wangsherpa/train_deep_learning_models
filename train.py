@@ -256,9 +256,11 @@ def start():
     
         train(n_epochs, model, train_load, valid_load, cr, op)
         accuracy = test(batch_size, model, test_load, classes, cr, op)
+        accuracy = int(accuracy)
         with open('accuracy.txt', 'w') as f:
             f.write(str(accuracy))
     else:
+	n_epochs = 2
         learning_rates = [0.01, 0.001]
         optimizers = ['Adam', 'SGD']
         acc = []
@@ -287,7 +289,7 @@ def start():
         print("Sending email to the user...")
         s = SendMail(str(max_acc) + '%', best_lr, best_opt)
         s.send_mail()
-
+        max_acc = int(max_acc)
         with open('accuracy.txt', 'w') as f:
             f.write(str(max_acc))
 
